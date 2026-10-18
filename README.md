@@ -1,8 +1,10 @@
 # XaeroUnfair
 
-A client-side Fabric mod for Minecraft: Java Edition that filters specific `§` color-code sequences out of incoming chat messages, as if the server had never sent them, and re-sends the reset sequence to the chat whenever you join a new world or server.
+A client-side Fabric mod for Minecraft: Java Edition that blocks incoming chat messages containing specific `§` color-code sequences, as if the server had never sent them, and simulates the reset sequence whenever you join a world or server.
 
-It is aimed at keeping **Xaero's Minimap** and **Xaero's World Map** behaving the way you want regardless of what the server announces in chat.
+It is designed for servers that enforce Xaero's FairPlay restrictions by sending an invisible chat message. A server may use a plugin, a mod, or a datapack to send that message.
+
+When those restrictions are sent this way, filtering the message and simulating the reset can allow **Cave Mode and Mob Radar in Xaero's Minimap** to remain available on your client. This mod only targets that invisible-chat-message method; it does not bypass other enforcement methods. In particular, it does not help when the server itself runs Xaero's Minimap as a server-side mod (available for NeoForge, Forge, Fabric, and Quilt).
 
 ## Download
 
@@ -10,20 +12,20 @@ Releases and supported Minecraft versions are listed on the [Releases](https://g
 
 ## Features
 
-- Removes specific `§` code fragments from chat before anything else can see them
+- Blocks chat messages containing the targeted `§` code sequences before anything else can see them
 - Runs first in the chat pipeline, so other mods never receive the filtered fragments
 - Simulates the reset sequence as if it came from the server every time you join a world or server
 - Client-side only: nothing needs to be installed on the server
 
 ## How it works
 
-1. When a chat message arrives, XaeroUnfair inspects it before any other mod handles it.
-2. Matching `§` sequences are stripped from the message, so downstream mods behave as if the server never sent them.
+1. When an incoming chat packet arrives, XaeroUnfair checks it before Minecraft or other mods handle it.
+2. If the message contains one of the targeted `§` sequences, the entire message is dropped, so downstream code does not receive it.
 3. On joining a world or server (including a Velocity server switch), the mod injects the reset sequence into chat as if the server had sent it. The reset sequence itself is never blocked, only simulated.
 
 ## Disclaimer
 
-Some servers use chat codes to restrict features of client-side mods, and bypassing those restrictions may break the server's rules. Check the rules of the server you play on. You use this mod at your own risk.
+This mod only works against servers that enforce FairPlay by sending one of the targeted invisible chat messages. It does not bypass restrictions enforced by a server-side Xaero's Minimap mod or by other means. Bypassing server restrictions may break the server's rules; check the rules of the server you play on. You use this mod at your own risk.
 
 ## License
 
