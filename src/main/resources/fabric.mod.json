@@ -8,9 +8,9 @@
     "Fisupala"
   ],
   "contact": {
-    "homepage": "",
-    "sources": "",
-    "issues": ""
+    "homepage": "github.com/Fisupala/XaeroUnfair",
+    "sources": "github.com/Fisupala/XaeroUnfair",
+    "issues": "github.com/Fisupala/XaeroUnfair/issues"
   },
   "license": "GPL-3.0-only",
   "environment": "client",
