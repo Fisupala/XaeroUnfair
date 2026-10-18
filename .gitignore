@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+
+# IDE settings (IntelliJ)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Minecraft run folders
+run/
+run-client/
+run-server/
+
+# OS / Misc
+.DS_Store
+Thumbs.db
