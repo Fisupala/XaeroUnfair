@@ -3,7 +3,7 @@
   "id": "xaerounfair",
   "version": "${version}",
   "name": "XaeroUnfair",
-  "description": "A lightweight Fabric mod that disables server-enforced FairPlay rules for **Xaero's Minimap** and **Xaero's WorldMap**.",
+  "description": "A client-side Fabric mod that filters targeted FairPlay chat messages and simulates the Xaero reset sequence.",
   "authors": [
     "Fisupala"
   ],
