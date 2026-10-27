@@ -35,8 +35,9 @@ public final class ChatFilterHandler extends ChannelInboundHandlerAdapter {
     }
 
     private static boolean shouldDrop(Object msg) {
-        if (msg instanceof ClientboundSystemChatPacket p) return ChatFilter.matches(p.content());
-        if (msg instanceof ClientboundDisguisedChatPacket p) return ChatFilter.matches(p.message());
+        XaerounfairConfig.Profile profile = XaerounfairConfig.activeProfile();
+        if (msg instanceof ClientboundSystemChatPacket p) return ChatFilter.shouldFilter(p.content(), profile);
+        if (msg instanceof ClientboundDisguisedChatPacket p) return ChatFilter.shouldFilter(p.message(), profile);
         return false;
     }
 

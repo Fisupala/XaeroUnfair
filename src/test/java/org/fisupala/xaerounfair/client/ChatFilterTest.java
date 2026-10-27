@@ -24,4 +24,29 @@ class ChatFilterTest {
     void safelyRejectsNull() {
         assertFalse(ChatFilter.matches((String) null));
     }
+
+    @Test
+    void manualModeFiltersOnlyRestrictionsThatAreNotHonored() {
+        XaerounfairConfig.Profile profile = new XaerounfairConfig.Profile(
+                XaerounfairConfig.Mode.MANUAL, true, false, true);
+        XaerounfairConfig.Profile ignoreAll = XaerounfairConfig.Profile.defaults();
+
+        assertFalse(ChatFilter.shouldFilter("§f§a§i§r§x§a§e§r§o", profile));
+        assertTrue(ChatFilter.shouldFilter("§f§a§i§r§x§a§e§r§o", ignoreAll));
+        assertTrue(ChatFilter.shouldFilter("§x§a§e§r§o§m§m§n§e§t§h§e§r§i§s§f§a§i§r", profile));
+        assertTrue(ChatFilter.shouldFilter("§x§a§e§r§o§w§m§n§e§t§h§e§r§i§s§f§a§i§r", profile));
+        assertFalse(ChatFilter.shouldFilter("§n§o§m§i§n§i§m§a§p", profile));
+        assertTrue(ChatFilter.shouldFilter("§n§o§m§i§n§i§m§a§p", ignoreAll));
+        assertTrue(ChatFilter.shouldFilter(ChatFilter.RESET_MESSAGE, profile));
+    }
+
+    @Test
+    void serverEnforcedModePassesEveryTargetedMessageThrough() {
+        XaerounfairConfig.Profile profile = new XaerounfairConfig.Profile(
+                XaerounfairConfig.Mode.SERVER_ENFORCED, false, false, false);
+
+        assertFalse(ChatFilter.shouldFilter("§f§a§i§r§x§a§e§r§o", profile));
+        assertFalse(ChatFilter.shouldFilter("§n§o§m§i§n§i§m§a§p", profile));
+        assertFalse(ChatFilter.shouldFilter(ChatFilter.RESET_MESSAGE, profile));
+    }
 }

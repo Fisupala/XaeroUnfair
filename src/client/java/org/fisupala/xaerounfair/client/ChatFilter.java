@@ -45,10 +45,33 @@ public final class ChatFilter {
     }
 
     public static boolean matches(String s) {
+        return containsTargetedSequence(s);
+    }
+
+    public static boolean shouldFilter(Component component, XaerounfairConfig.Profile profile) {
+        return component != null && shouldFilter(component.getString(), profile);
+    }
+
+    static boolean shouldFilter(String s, XaerounfairConfig.Profile profile) {
+        if (profile.mode() == XaerounfairConfig.Mode.SERVER_ENFORCED || s == null || s.indexOf('§') < 0) return false;
+
+        if (contains(s, "resetxaero")) return true;
+        if (contains(s, "fairxaero")) return !profile.honorFairxaero();
+        if (contains(s, "xaerommnetherisfair") || contains(s, "xaerowmnetherisfair")) {
+            return !profile.honorNether();
+        }
+        return contains(s, "nominimap") && !profile.honorNoMinimap();
+    }
+
+    private static boolean containsTargetedSequence(String s) {
         if (s == null || s.indexOf('§') < 0) return false;
         for (String needle : NEEDLES) {
             if (s.contains(needle)) return true;
         }
         return false;
+    }
+
+    private static boolean contains(String message, String key) {
+        return message.contains(spaced(key));
     }
 }

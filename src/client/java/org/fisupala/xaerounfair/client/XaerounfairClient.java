@@ -24,15 +24,28 @@ public class XaerounfairClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        ClientPlayConnectionEvents.INIT.register((handler, client) ->
-                ChatFilterHandler.install(handler.getConnection()));
+        XaerounfairConfig.load();
+
+        ClientPlayConnectionEvents.INIT.register((handler, client) -> {
+            XaerounfairConfig.activateServer(client.getCurrentServer() == null ? null : client.getCurrentServer().ip);
+            ResetSimulator.cancel();
+            ChatFilterHandler.install(handler.getConnection());
+        });
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             ChatFilterHandler.install(handler.getConnection());
-            ResetSimulator.schedule(); // myös Velocity-palvelinvaihdossa
+            XaerounfairConfig.activateServer(client.getCurrentServer() == null ? null : client.getCurrentServer().ip);
+            if (XaerounfairConfig.activeProfile().mode() == XaerounfairConfig.Mode.MANUAL) {
+                ResetSimulator.schedule();
+            } else {
+                ResetSimulator.cancel();
+            }
         });
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ResetSimulator.cancel());
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            ResetSimulator.cancel();
+            XaerounfairConfig.activateServer(null);
+        });
 
         ClientTickEvents.END_CLIENT_TICK.register(ResetSimulator::tick);
     }

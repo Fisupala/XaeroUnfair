@@ -18,6 +18,9 @@
     "client": [
       "org.fisupala.xaerounfair.client.XaerounfairClient"
     ],
+    "modmenu": [
+      "org.fisupala.xaerounfair.client.XaerounfairModMenu"
+    ],
     "main": [
       "org.fisupala.xaerounfair.Xaerounfair"
     ]
@@ -34,6 +37,7 @@
     "minecraft": "26.3"
   },
   "suggests": {
+    "modmenu": ">=22.0.0-alpha.2",
     "xaerominimap": ">=25.5.2",
     "xaeroworldmap": ">=1.46.3"
   }
