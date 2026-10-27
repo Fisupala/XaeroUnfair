@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
@@ -33,13 +34,34 @@ public final class XaerounfairConfig {
         MANUAL
     }
 
-    public record Profile(Mode mode, boolean honorFairxaero, boolean honorNether, boolean honorNoMinimap) {
+    public enum ManualProfile {
+        DEFAULT,
+        MINIMAP_OFF,
+        NETHER_CAVE,
+        BASIC_FAIRPLAY;
+
+        public ManualProfile next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+
+        public List<String> simulatedMessageKeys() {
+            return switch (this) {
+                case DEFAULT -> List.of();
+                case MINIMAP_OFF -> List.of("nominimap");
+                case NETHER_CAVE -> List.of("xaerommnetherisfair");
+                case BASIC_FAIRPLAY -> List.of("fairxaero");
+            };
+        }
+    }
+
+    public record Profile(Mode mode, ManualProfile manualProfile) {
         public Profile {
             if (mode == null) throw new IllegalArgumentException("mode cannot be null");
+            if (manualProfile == null) throw new IllegalArgumentException("manualProfile cannot be null");
         }
 
         public static Profile defaults() {
-            return new Profile(Mode.MANUAL, false, false, false);
+            return new Profile(Mode.MANUAL, ManualProfile.DEFAULT);
         }
     }
 
@@ -140,20 +162,40 @@ public final class XaerounfairConfig {
             }
         }
 
-        return new Profile(
-                mode,
-                readBoolean(properties, prefix + "honorFairxaero", fallback.honorFairxaero()),
-                readBoolean(properties, prefix + "honorNether", fallback.honorNether()),
-                readBoolean(properties, prefix + "honorNoMinimap", fallback.honorNoMinimap())
-        );
+        String manualProfileValue = properties.getProperty(prefix + "manualProfile");
+        ManualProfile manualProfile = fallback.manualProfile();
+        if (manualProfileValue != null) {
+            try {
+                manualProfile = ManualProfile.valueOf(manualProfileValue);
+            } catch (IllegalArgumentException exception) {
+                XaerounfairClient.LOG.warn("Invalid setting {}manualProfile: {}", prefix, manualProfileValue);
+            }
+        } else {
+            String legacyTarget = properties.getProperty(prefix + "filterTarget");
+            if (legacyTarget != null) {
+                XaerounfairClient.LOG.warn(
+                        "Migrating obsolete single-filter setting {}filterTarget to the Default profile", prefix);
+                manualProfile = fallback.manualProfile();
+            } else {
+                manualProfile = migrateLegacyProfile(properties, prefix, fallback.manualProfile());
+            }
+        }
+        return new Profile(mode, manualProfile);
     }
 
-    private static boolean readBoolean(Properties properties, String key, boolean fallback) {
-        String value = properties.getProperty(key);
-        if (value == null) return fallback;
-        if ("true".equalsIgnoreCase(value)) return true;
-        if ("false".equalsIgnoreCase(value)) return false;
-        XaerounfairClient.LOG.warn("Invalid boolean setting {}: {}", key, value);
+    private static ManualProfile migrateLegacyProfile(Properties properties, String prefix, ManualProfile fallback) {
+        String fairxaeroSetting = properties.getProperty(prefix + "honorFairxaero");
+        String netherSetting = properties.getProperty(prefix + "honorNether");
+        String noMinimapSetting = properties.getProperty(prefix + "honorNoMinimap");
+        if (fairxaeroSetting == null && netherSetting == null && noMinimapSetting == null) return fallback;
+
+        boolean fairxaero = Boolean.parseBoolean(fairxaeroSetting);
+        boolean nether = Boolean.parseBoolean(netherSetting);
+        boolean noMinimap = Boolean.parseBoolean(noMinimapSetting);
+        if (!fairxaero && !nether && !noMinimap) return ManualProfile.DEFAULT;
+        if (fairxaero && nether && !noMinimap) return ManualProfile.NETHER_CAVE;
+        if (fairxaero && !nether && !noMinimap) return ManualProfile.BASIC_FAIRPLAY;
+        if (!fairxaero && !nether && noMinimap) return ManualProfile.MINIMAP_OFF;
         return fallback;
     }
 
@@ -174,9 +216,7 @@ public final class XaerounfairConfig {
 
     private static void writeProfile(Properties properties, String prefix, Profile profile) {
         properties.setProperty(prefix + "mode", profile.mode().name());
-        properties.setProperty(prefix + "honorFairxaero", Boolean.toString(profile.honorFairxaero()));
-        properties.setProperty(prefix + "honorNether", Boolean.toString(profile.honorNether()));
-        properties.setProperty(prefix + "honorNoMinimap", Boolean.toString(profile.honorNoMinimap()));
+        properties.setProperty(prefix + "manualProfile", profile.manualProfile().name());
     }
 
     private static String serverPrefix(String address) {

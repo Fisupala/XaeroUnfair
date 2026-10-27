@@ -13,120 +13,209 @@
  */
 package org.fisupala.xaerounfair.client;
 
+import it.unimi.dsi.fastutil.booleans.BooleanConsumer;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 public final class XaerounfairConfigScreen extends Screen {
-    private static final int BUTTON_WIDTH = 310;
+    private static final int BUTTON_WIDTH = 150;
     private static final int BUTTON_HEIGHT = 20;
+    private static final int COLUMN_GAP = 8;
+    private static final int ROW_GAP = 5;
 
     private final Screen parent;
+    private final String serverAddress;
+    private final XaerounfairConfig.Profile initialDefaults;
+    private final XaerounfairConfig.Profile initialServerProfile;
+    private XaerounfairConfig.Profile draftDefaults;
+    private XaerounfairConfig.Profile draftServerProfile;
     private boolean editingServer;
 
     public XaerounfairConfigScreen(Screen parent) {
         super(Component.literal("XaeroUnfair Settings"));
         this.parent = parent;
-        this.editingServer = XaerounfairConfig.activeServerAddress() != null;
+        this.serverAddress = XaerounfairConfig.activeServerAddress();
+        this.editingServer = serverAddress != null;
+        this.initialDefaults = XaerounfairConfig.defaultsProfile();
+        this.draftDefaults = initialDefaults;
+        this.initialServerProfile = serverAddress == null ? null : XaerounfairConfig.serverProfile(serverAddress);
+        this.draftServerProfile = initialServerProfile;
     }
 
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int left = centerX - BUTTON_WIDTH / 2;
-        int top = Math.max(28, this.height / 2 - 100);
-        String serverAddress = XaerounfairConfig.activeServerAddress();
+        int totalWidth = BUTTON_WIDTH * 2 + COLUMN_GAP;
+        int left = centerX - totalWidth / 2;
+        int right = left + BUTTON_WIDTH + COLUMN_GAP;
+        int top = Math.max(24, this.height / 2 - 100);
+        int rowHeight = BUTTON_HEIGHT + ROW_GAP;
+        XaerounfairConfig.Profile profile = selectedProfile();
 
         if (serverAddress != null) {
-            String shortAddress = serverAddress.length() > 35 ? serverAddress.substring(0, 32) + "..." : serverAddress;
-            String profileName = editingServer ? "This server: " + shortAddress : "Global defaults";
-            addButton(left, top, profileName, button -> {
-                editingServer = !editingServer;
-                rebuild();
-            });
+            String target = editingServer ? "Profile: server" : "Profile: global";
+            String targetTooltip = editingServer
+                    ? "Edit the profile for " + serverAddress + "."
+                    : "Edit the fallback profile used by servers without their own settings.";
+            addButton(left, top, Component.literal(target).withStyle(hasChanges() ? ChatFormatting.YELLOW : ChatFormatting.WHITE),
+                    targetTooltip,
+                    button -> {
+                        editingServer = !editingServer;
+                        rebuildWidgets();
+                    });
+            top += rowHeight;
         }
 
-        XaerounfairConfig.Profile profile = selectedProfile();
-        int row = serverAddress == null ? top : top + 25;
-        addButton(left, row, "Mode: " + modeLabel(profile), button -> updateProfile(new XaerounfairConfig.Profile(
-                profile.mode() == XaerounfairConfig.Mode.MANUAL
-                        ? XaerounfairConfig.Mode.SERVER_ENFORCED
-                        : XaerounfairConfig.Mode.MANUAL,
-                profile.honorFairxaero(),
-                profile.honorNether(),
-                profile.honorNoMinimap()
-        )));
+        addButton(left, top, settingText("Mode: " + modeLabel(profile.mode()), profile.mode() != originalProfile().mode()),
+                "Server enforced passes all FairPlay messages through. Manual applies the selected profile.",
+                button -> updateProfile(new XaerounfairConfig.Profile(
+                        profile.mode() == XaerounfairConfig.Mode.MANUAL
+                                ? XaerounfairConfig.Mode.SERVER_ENFORCED
+                                : XaerounfairConfig.Mode.MANUAL,
+                        profile.manualProfile()
+                )));
+        Button profileButton = addButton(right, top, settingText("Manual profile: " + profileLabel(profile.manualProfile()),
+                        profile.manualProfile() != originalProfile().manualProfile()),
+                "Choose what to apply in Manual mode: Default filters everything; Minimap off applies nominimap; Nether Cave applies only xaerommnetherisfair; Basic FairPlay applies fairxaero.",
+                button -> updateProfile(new XaerounfairConfig.Profile(profile.mode(), profile.manualProfile().next())));
+        profileButton.active = profile.mode() == XaerounfairConfig.Mode.MANUAL;
 
-        row += 27;
-        addButton(left, row, restrictionLabel("No Cave Mode or entities (fairxaero)", profile.honorFairxaero()),
-                button -> updateProfile(new XaerounfairConfig.Profile(profile.mode(), !profile.honorFairxaero(),
-                        profile.honorNether(), profile.honorNoMinimap())));
-        row += 25;
-        addButton(left, row, restrictionLabel("Nether: no entities, Cave Mode allowed", profile.honorNether()),
-                button -> updateProfile(new XaerounfairConfig.Profile(profile.mode(), profile.honorFairxaero(),
-                        !profile.honorNether(), profile.honorNoMinimap())));
-        row += 25;
-        addButton(left, row, restrictionLabel("Minimap off", profile.honorNoMinimap()),
-                button -> updateProfile(new XaerounfairConfig.Profile(profile.mode(), profile.honorFairxaero(),
-                        profile.honorNether(), !profile.honorNoMinimap())));
-        row += 34;
-        Button resetButton = addButton(left, row, "Simulate reset sequence", button -> triggerReset());
+        top += rowHeight + 4;
+        Button resetButton = addButton(left, top, Component.literal("Simulate reset sequence"),
+                "Run Xaero's reset sequence now. This is available only in Manual mode.",
+                button -> triggerReset());
+        resetButton.setWidth(totalWidth);
+        resetButton.setX(left);
         Minecraft client = Minecraft.getInstance();
-        resetButton.active = client.player != null && client.level != null && client.getConnection() != null;
-        row += 25;
-        addButton(left, row, "Done", button -> onClose());
+        resetButton.active = profile.mode() == XaerounfairConfig.Mode.MANUAL
+                && client.player != null && client.level != null && client.getConnection() != null;
+
+        top += rowHeight + 4;
+        Button applyButton = addButton(left, top, Component.literal("Apply"),
+                "Save changed profiles, reset Xaero, then apply only the selected mode's instruction while connected.",
+                button -> applyAndClose());
+        applyButton.active = hasChanges() || client.player != null && client.level != null && client.getConnection() != null;
+        addButton(right, top, Component.literal("Discard"),
+                "Discard all unsaved changes and close this screen.", button -> discardAndClose());
     }
 
     @Override
     public void onClose() {
-        this.minecraft.setScreenAndShow(parent);
+        if (!hasChanges()) {
+            closeScreen();
+            return;
+        }
+
+        BooleanConsumer choice = save -> {
+            if (save) {
+                persistAndApply();
+            } else {
+                discardChanges();
+            }
+            closeScreen();
+        };
+        this.minecraft.setScreenAndShow(new ConfirmScreen(
+                choice,
+                Component.literal("Unsaved XaeroUnfair settings"),
+                Component.literal("Apply your changes before leaving?"),
+                Component.literal("Apply"),
+                Component.literal("Discard")
+        ));
     }
 
     private XaerounfairConfig.Profile selectedProfile() {
-        String address = XaerounfairConfig.activeServerAddress();
-        return editingServer && address != null
-                ? XaerounfairConfig.serverProfile(address)
-                : XaerounfairConfig.defaultsProfile();
+        return editingServer && serverAddress != null ? draftServerProfile : draftDefaults;
+    }
+
+    private XaerounfairConfig.Profile originalProfile() {
+        return editingServer && serverAddress != null ? initialServerProfile : initialDefaults;
+    }
+
+    private boolean hasChanges() {
+        return !draftDefaults.equals(initialDefaults)
+                || (serverAddress != null && !draftServerProfile.equals(initialServerProfile));
     }
 
     private void updateProfile(XaerounfairConfig.Profile profile) {
-        String address = XaerounfairConfig.activeServerAddress();
-        if (editingServer && address != null) {
-            XaerounfairConfig.setServerProfile(address, profile);
+        if (editingServer && serverAddress != null) {
+            draftServerProfile = profile;
         } else {
-            XaerounfairConfig.setDefaults(profile);
+            draftDefaults = profile;
         }
-        if (XaerounfairConfig.activeProfile().mode() == XaerounfairConfig.Mode.SERVER_ENFORCED) {
-            ResetSimulator.cancel();
-        }
-        rebuild();
+        rebuildWidgets();
     }
 
-    private void rebuild() {
-        this.rebuildWidgets();
+    private void applyAndClose() {
+        persistAndApply();
+        closeScreen();
     }
 
-    private Button addButton(int x, int y, String label, Button.OnPress action) {
-        return this.addRenderableWidget(Button.builder(Component.literal(label), action)
+    private void discardAndClose() {
+        discardChanges();
+        closeScreen();
+    }
+
+    private void persistChanges() {
+        if (!draftDefaults.equals(initialDefaults)) {
+            XaerounfairConfig.setDefaults(draftDefaults);
+        }
+        if (serverAddress != null && !draftServerProfile.equals(initialServerProfile)) {
+            XaerounfairConfig.setServerProfile(serverAddress, draftServerProfile);
+        }
+    }
+
+    private void persistAndApply() {
+        persistChanges();
+        Minecraft client = Minecraft.getInstance();
+        if (!ResetSimulator.applyProfileNow(client, XaerounfairConfig.activeProfile())
+                && client.player != null && client.level != null && client.getConnection() != null) {
+            XaerounfairClient.LOG.warn("Cannot apply XaeroUnfair mode without an active world and connection");
+        }
+    }
+
+    private void discardChanges() {
+        draftDefaults = initialDefaults;
+        draftServerProfile = initialServerProfile;
+    }
+
+    private void closeScreen() {
+        this.minecraft.setScreenAndShow(parent);
+    }
+
+    private Button addButton(int x, int y, Component label, String tooltip, Button.OnPress action) {
+        return this.addRenderableWidget(Button.builder(label, action)
                 .bounds(x, y, BUTTON_WIDTH, BUTTON_HEIGHT)
+                .tooltip(Tooltip.create(Component.literal(tooltip)))
                 .build());
     }
 
     private void triggerReset() {
         Minecraft client = Minecraft.getInstance();
-        if (client.player == null || client.level == null || client.getConnection() == null) {
+        if (!ResetSimulator.simulateNow(client)) {
             XaerounfairClient.LOG.warn("Cannot simulate Xaero reset without an active world and connection");
-            return;
         }
-        ResetSimulator.schedule();
     }
 
-    private static String modeLabel(XaerounfairConfig.Profile profile) {
-        return profile.mode() == XaerounfairConfig.Mode.SERVER_ENFORCED ? "Server enforced" : "Manual";
+    private Component settingText(String text, boolean changed) {
+        return Component.literal(text).withStyle(changed ? ChatFormatting.YELLOW : ChatFormatting.WHITE);
     }
 
-    private static String restrictionLabel(String label, boolean honor) {
-        return label + ": " + (honor ? "Honor" : "Ignore");
+    private static String modeLabel(XaerounfairConfig.Mode mode) {
+        return mode == XaerounfairConfig.Mode.SERVER_ENFORCED ? "Server enforced" : "Manual";
     }
+
+    private static String profileLabel(XaerounfairConfig.ManualProfile profile) {
+        return switch (profile) {
+            case DEFAULT -> "Default";
+            case MINIMAP_OFF -> "Minimap off";
+            case NETHER_CAVE -> "Nether Cave";
+            case BASIC_FAIRPLAY -> "Basic FairPlay";
+        };
+    }
+
 }
