@@ -24,6 +24,7 @@ import org.fisupala.xaerounfair.mixin.client.ConnectionAccessor;
 
 public final class ChatFilterHandler extends ChannelInboundHandlerAdapter {
     public static final String NAME = "xaerounfair_first";
+    private static final ServerMessageHistory SERVER_MESSAGES = new ServerMessageHistory();
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -36,9 +37,19 @@ public final class ChatFilterHandler extends ChannelInboundHandlerAdapter {
 
     private static boolean shouldDrop(Object msg) {
         XaerounfairConfig.Profile profile = XaerounfairConfig.activeProfile();
-        if (msg instanceof ClientboundSystemChatPacket p) return ChatFilter.shouldFilter(p.content(), profile);
-        if (msg instanceof ClientboundDisguisedChatPacket p) return ChatFilter.shouldFilter(p.message(), profile);
+        if (msg instanceof ClientboundSystemChatPacket p) {
+            SERVER_MESSAGES.remember(p.content().getString());
+            return ChatFilter.shouldFilter(p.content(), profile);
+        }
+        if (msg instanceof ClientboundDisguisedChatPacket p) {
+            SERVER_MESSAGES.remember(p.message().getString());
+            return ChatFilter.shouldFilter(p.message(), profile);
+        }
         return false;
+    }
+
+    public static ServerMessageHistory serverMessages() {
+        return SERVER_MESSAGES;
     }
 
     /** Idempotentti: turvallista kutsua monta kertaa (INIT, JOIN, Velocity-vaihdot). */

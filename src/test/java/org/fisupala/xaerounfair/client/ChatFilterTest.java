@@ -1,5 +1,6 @@
 package org.fisupala.xaerounfair.client;
 
+import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -29,7 +30,7 @@ class ChatFilterTest {
     }
 
     @Test
-    void manualProfilesApplyTheirFullRestrictionSets() {
+    void manualProfilesAlwaysFilterEveryTargetedMessage() {
         String fairxaero = "§f§a§i§r§x§a§e§r§o";
         String noMinimap = "§n§o§m§i§n§i§m§a§p";
         String minimapNether = "§x§a§e§r§o§m§m§n§e§t§h§e§r§i§s§f§a§i§r";
@@ -46,26 +47,61 @@ class ChatFilterTest {
         assertTrue(ChatFilter.shouldFilter(ChatFilter.RESET_MESSAGE, defaults));
 
         assertTrue(ChatFilter.shouldFilter(fairxaero, minimapOff));
-        assertFalse(ChatFilter.shouldFilter(noMinimap, minimapOff));
+        assertTrue(ChatFilter.shouldFilter(noMinimap, minimapOff));
         assertTrue(ChatFilter.shouldFilter(minimapNether, minimapOff));
-        assertTrue(ChatFilter.shouldFilter(fairxaero + noMinimap, minimapOff));
+        assertTrue(ChatFilter.shouldFilter(worldMapNether, minimapOff));
 
         assertTrue(ChatFilter.shouldFilter(fairxaero, netherCave));
         assertTrue(ChatFilter.shouldFilter(noMinimap, netherCave));
-        assertFalse(ChatFilter.shouldFilter(minimapNether, netherCave));
+        assertTrue(ChatFilter.shouldFilter(minimapNether, netherCave));
         assertTrue(ChatFilter.shouldFilter(worldMapNether, netherCave));
 
-        assertFalse(ChatFilter.shouldFilter(fairxaero, basicFairPlay));
+        assertTrue(ChatFilter.shouldFilter(fairxaero, basicFairPlay));
         assertTrue(ChatFilter.shouldFilter(noMinimap, basicFairPlay));
         assertTrue(ChatFilter.shouldFilter(minimapNether, basicFairPlay));
         assertTrue(ChatFilter.shouldFilter(worldMapNether, basicFairPlay));
     }
 
     @Test
-    void manualProfilesMapToOnlyTheirModeInstructions() {
+    void syntheticMessagesAreNotFiltered() {
+        Component synthetic = Component.literal(ChatFilter.RESET_MESSAGE);
+        ResetSimulator.registerSimulatedMessage(synthetic);
+
+        try {
+            assertFalse(ChatFilter.shouldFilter(synthetic, manual(XaerounfairConfig.ManualProfile.DEFAULT)));
+            assertFalse(ChatFilter.shouldFilter(synthetic, manual(XaerounfairConfig.ManualProfile.MINIMAP_OFF)));
+        } finally {
+            ResetSimulator.consumeSimulatedMessage(synthetic);
+        }
+    }
+
+    @Test
+    void serverMessageHistoryKeepsLastFiveTargetedMessagesInArrivalOrder() {
+        ServerMessageHistory history = new ServerMessageHistory();
+        for (int i = 1; i <= 6; i++) {
+            history.remember("message" + i + " " + ChatFilter.spaced("fairxaero"));
+        }
+
+        assertEquals(5, history.messagesOldestFirst().size());
+        assertEquals("message2 fairxaero", history.messagesOldestFirst().getFirst().plainText());
+        assertEquals("message6 fairxaero", history.messagesOldestFirst().getLast().plainText());
+        assertEquals("message2 " + ChatFilter.spaced("fairxaero"),
+                history.messagesOldestFirst().getFirst().raw());
+    }
+
+    @Test
+    void serverMessageHistoryIgnoresUnrelatedFormatting() {
+        ServerMessageHistory history = new ServerMessageHistory();
+        history.remember("§aordinary formatted message");
+
+        assertTrue(history.messagesOldestFirst().isEmpty());
+    }
+
+    @Test
+    void manualProfilesMapToTheirModeInstructions() {
         assertEquals(List.of(), XaerounfairConfig.ManualProfile.DEFAULT.simulatedMessageKeys());
         assertEquals(List.of("nominimap"), XaerounfairConfig.ManualProfile.MINIMAP_OFF.simulatedMessageKeys());
-        assertEquals(List.of("xaerommnetherisfair"),
+        assertEquals(List.of("fairxaero", "xaerommnetherisfair"),
                 XaerounfairConfig.ManualProfile.NETHER_CAVE.simulatedMessageKeys());
         assertEquals(List.of("fairxaero"), XaerounfairConfig.ManualProfile.BASIC_FAIRPLAY.simulatedMessageKeys());
     }
@@ -74,18 +110,20 @@ class ChatFilterTest {
     void simulatedInstructionFormattingIncludesXaeroColorCodes() {
         assertEquals("§n§o§m§i§n§i§m§a§p",
                 ChatFilter.spaced(XaerounfairConfig.ManualProfile.MINIMAP_OFF.simulatedMessageKeys().getFirst()));
-        assertEquals("§x§a§e§r§o§m§m§n§e§t§h§e§r§i§s§f§a§i§r",
+        assertEquals("§f§a§i§r§x§a§e§r§o",
                 ChatFilter.spaced(XaerounfairConfig.ManualProfile.NETHER_CAVE.simulatedMessageKeys().getFirst()));
+        assertEquals("§x§a§e§r§o§m§m§n§e§t§h§e§r§i§s§f§a§i§r",
+                ChatFilter.spaced(XaerounfairConfig.ManualProfile.NETHER_CAVE.simulatedMessageKeys().get(1)));
         assertEquals("§f§a§i§r§x§a§e§r§o",
                 ChatFilter.spaced(XaerounfairConfig.ManualProfile.BASIC_FAIRPLAY.simulatedMessageKeys().getFirst()));
     }
 
     @Test
-    void onlyDefaultManualProfileRunsResetOnJoin() {
+    void everyManualProfileRunsItsSimulationOnJoin() {
         assertTrue(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.DEFAULT)));
-        assertFalse(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.MINIMAP_OFF)));
-        assertFalse(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.NETHER_CAVE)));
-        assertFalse(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.BASIC_FAIRPLAY)));
+        assertTrue(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.MINIMAP_OFF)));
+        assertTrue(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.NETHER_CAVE)));
+        assertTrue(ResetSimulator.shouldRunOnJoin(manual(XaerounfairConfig.ManualProfile.BASIC_FAIRPLAY)));
         assertFalse(ResetSimulator.shouldRunOnJoin(new XaerounfairConfig.Profile(
                 XaerounfairConfig.Mode.SERVER_ENFORCED, XaerounfairConfig.ManualProfile.DEFAULT)));
     }

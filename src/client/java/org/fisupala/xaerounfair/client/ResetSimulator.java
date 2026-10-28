@@ -36,24 +36,40 @@ public final class ResetSimulator {
 
     private ResetSimulator() {}
 
+    public static boolean isSimulatedMessage(Component message) {
+        return message != null && SIMULATED_MESSAGES.contains(message);
+    }
+
     public static boolean consumeSimulatedMessage(Component message) {
         return SIMULATED_MESSAGES.remove(message);
     }
 
-    public static boolean shouldRunOnJoin(XaerounfairConfig.Profile profile) {
-        return profile.mode() == XaerounfairConfig.Mode.MANUAL
-                && profile.manualProfile() == XaerounfairConfig.ManualProfile.DEFAULT;
+    static void registerSimulatedMessage(Component message) {
+        SIMULATED_MESSAGES.add(message);
     }
 
-    public static void schedule() {
+    public static boolean shouldRunOnJoin(XaerounfairConfig.Profile profile) {
+        return profile.mode() == XaerounfairConfig.Mode.MANUAL;
+    }
+
+    public static void schedule(XaerounfairConfig.Profile profile) {
         ticks = 0;
         next = 0;
-        messagesAfterReset = List.of();
-        sequenceMode = "DEFAULT";
+        messagesAfterReset = List.copyOf(profile.manualProfile().simulatedMessageKeys());
+        sequenceMode = profile.manualProfile().name();
     }
 
     public static boolean simulateNow(Minecraft mc) {
         return startSequence(mc, "RESET_ONLY", List.of());
+    }
+
+    public static boolean replayMessagesNow(Minecraft mc, List<String> messages) {
+        if (mc.player == null || mc.level == null || mc.getConnection() == null) return false;
+        cancel();
+        for (String message : messages) {
+            fire(mc, "SERVER_ENFORCED_REPLAY", message);
+        }
+        return true;
     }
 
     public static boolean applyProfileNow(Minecraft mc, XaerounfairConfig.Profile profile) {
@@ -106,7 +122,11 @@ public final class ResetSimulator {
         XaerounfairClient.LOG.info("Simulating mode {} message/color code: {}", mode, formattedMessage);
         Component message = Component.literal(formattedMessage);
         ClientboundSystemChatPacket packet = new ClientboundSystemChatPacket(message, false);
-        SIMULATED_MESSAGES.add(message);
-        packet.handle(listener);
+        registerSimulatedMessage(message);
+        try {
+            packet.handle(listener);
+        } finally {
+            consumeSimulatedMessage(message);
+        }
     }
 }

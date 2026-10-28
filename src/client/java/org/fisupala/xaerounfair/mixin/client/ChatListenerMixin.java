@@ -13,19 +13,41 @@
     */
 package org.fisupala.xaerounfair.mixin.client;
 
+import net.minecraft.client.GameNarrator;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.ChatListener;
 import net.minecraft.network.chat.Component;
 import org.fisupala.xaerounfair.client.ResetSimulator;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Redirect;
 
-// Let other listeners inspect synthetic instructions before suppressing their visible chat output.
+// Keep the message handler running so Xaero can inspect synthetic instructions; suppress only their output.
 @Mixin(value = ChatListener.class, priority = 1)
 public class ChatListenerMixin {
-    @Inject(method = "handleSystemMessage", at = @At("HEAD"), cancellable = true)
-    private void xaerounfair$hideSimulated(Component message, boolean overlay, CallbackInfo ci) {
-        if (ResetSimulator.consumeSimulatedMessage(message)) ci.cancel();
+    @Redirect(
+            method = "handleSystemMessage",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/components/ChatComponent;addServerSystemMessage(Lnet/minecraft/network/chat/Component;)V"
+            )
+    )
+    private void xaerounfair$hideSimulatedChat(ChatComponent chat, Component message) {
+        if (!ResetSimulator.isSimulatedMessage(message)) {
+            chat.addServerSystemMessage(message);
+        }
+    }
+
+    @Redirect(
+            method = "handleSystemMessage",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/GameNarrator;saySystemChatQueued(Lnet/minecraft/network/chat/Component;)V"
+            )
+    )
+    private void xaerounfair$hideSimulatedNarration(GameNarrator narrator, Component message) {
+        if (!ResetSimulator.isSimulatedMessage(message)) {
+            narrator.saySystemChatQueued(message);
+        }
     }
 }

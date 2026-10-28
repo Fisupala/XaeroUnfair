@@ -35,8 +35,9 @@ public class XaerounfairClient implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             ChatFilterHandler.install(handler.getConnection());
             XaerounfairConfig.activateServer(client.getCurrentServer() == null ? null : client.getCurrentServer().ip);
-            if (ResetSimulator.shouldRunOnJoin(XaerounfairConfig.activeProfile())) {
-                ResetSimulator.schedule();
+            XaerounfairConfig.Profile profile = XaerounfairConfig.activeProfile();
+            if (ResetSimulator.shouldRunOnJoin(profile)) {
+                ResetSimulator.schedule(profile);
             } else {
                 ResetSimulator.cancel();
             }

@@ -49,21 +49,14 @@ public final class ChatFilter {
     }
 
     public static boolean shouldFilter(Component component, XaerounfairConfig.Profile profile) {
-        return component != null && shouldFilter(component.getString(), profile);
+        return component != null
+                && !ResetSimulator.isSimulatedMessage(component)
+                && shouldFilter(component.getString(), profile);
     }
 
     static boolean shouldFilter(String s, XaerounfairConfig.Profile profile) {
         if (profile.mode() == XaerounfairConfig.Mode.SERVER_ENFORCED || s == null || s.indexOf('§') < 0) return false;
-        if (contains(s, "resetxaero")) return true;
-
-        return switch (profile.manualProfile()) {
-            case DEFAULT -> containsTargetedSequence(s);
-            case MINIMAP_OFF -> contains(s, "fairxaero") || containsNetherFairplay(s);
-            case NETHER_CAVE -> contains(s, "fairxaero") || contains(s, "nominimap")
-                    || contains(s, "xaerowmnetherisfair");
-            case BASIC_FAIRPLAY -> contains(s, "nominimap")
-                    || containsNetherFairplay(s);
-        };
+        return containsTargetedSequence(s);
     }
 
     private static boolean containsTargetedSequence(String s) {
@@ -74,11 +67,4 @@ public final class ChatFilter {
         return false;
     }
 
-    private static boolean contains(String message, String key) {
-        return message.contains(spaced(key));
-    }
-
-    private static boolean containsNetherFairplay(String message) {
-        return contains(message, "xaerommnetherisfair") || contains(message, "xaerowmnetherisfair");
-    }
 }

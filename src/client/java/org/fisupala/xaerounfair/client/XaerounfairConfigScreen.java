@@ -20,11 +20,16 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+
+import java.util.List;
 
 public final class XaerounfairConfigScreen extends Screen {
     private static final int BUTTON_WIDTH = 150;
     private static final int BUTTON_HEIGHT = 20;
+    private static final int HISTORY_BUTTON_SIZE = 20;
+    private static final int HISTORY_BUTTON_GAP = 4;
     private static final int COLUMN_GAP = 8;
     private static final int ROW_GAP = 5;
 
@@ -35,6 +40,9 @@ public final class XaerounfairConfigScreen extends Screen {
     private XaerounfairConfig.Profile draftDefaults;
     private XaerounfairConfig.Profile draftServerProfile;
     private boolean editingServer;
+    private Button modeButton;
+    private int modeButtonX;
+    private int modeButtonY;
 
     public XaerounfairConfigScreen(Screen parent) {
         super(Component.literal("XaeroUnfair Settings"));
@@ -71,37 +79,41 @@ public final class XaerounfairConfigScreen extends Screen {
             top += rowHeight;
         }
 
-        addButton(left, top, settingText("Mode: " + modeLabel(profile.mode()), profile.mode() != originalProfile().mode()),
-                "Server enforced passes all FairPlay messages through. Manual applies the selected profile.",
-                button -> updateProfile(new XaerounfairConfig.Profile(
-                        profile.mode() == XaerounfairConfig.Mode.MANUAL
-                                ? XaerounfairConfig.Mode.SERVER_ENFORCED
-                                : XaerounfairConfig.Mode.MANUAL,
-                        profile.manualProfile()
-                )));
+        modeButtonX = left;
+        modeButtonY = top;
+        modeButton = addButton(left, top, settingText("Mode: " + modeLabel(profile.mode()), profile.mode() != originalProfile().mode()),
+                "Left-click to view the last five targeted server messages. Right-click to switch modes; switching to Server enforced replays those messages.",
+                button -> openMessageHistory());
+        modeButton.setWidth(BUTTON_WIDTH - HISTORY_BUTTON_SIZE - HISTORY_BUTTON_GAP);
+        this.addRenderableWidget(Button.builder(Component.literal("..."), button -> openMessageHistory())
+                .bounds(left + BUTTON_WIDTH - HISTORY_BUTTON_SIZE, top, HISTORY_BUTTON_SIZE, BUTTON_HEIGHT)
+                .tooltip(Tooltip.create(Component.literal("View recent server messages")))
+                .build());
         Button profileButton = addButton(right, top, settingText("Manual profile: " + profileLabel(profile.manualProfile()),
                         profile.manualProfile() != originalProfile().manualProfile()),
-                "Choose what to apply in Manual mode: Default filters everything; Minimap off applies nominimap; Nether Cave applies only xaerommnetherisfair; Basic FairPlay applies fairxaero.",
+                "Choose what to apply in Manual mode: Default filters everything; Minimap off applies nominimap; Nether Cave applies fairxaero plus xaerommnetherisfair; Basic FairPlay applies fairxaero.",
                 button -> updateProfile(new XaerounfairConfig.Profile(profile.mode(), profile.manualProfile().next())));
         profileButton.active = profile.mode() == XaerounfairConfig.Mode.MANUAL;
 
         top += rowHeight + 4;
-        Button resetButton = addButton(left, top, Component.literal("Simulate reset sequence"),
-                "Run Xaero's reset sequence now. This is available only in Manual mode.",
-                button -> triggerReset());
-        resetButton.setWidth(totalWidth);
-        resetButton.setX(left);
         Minecraft client = Minecraft.getInstance();
-        resetButton.active = profile.mode() == XaerounfairConfig.Mode.MANUAL
-                && client.player != null && client.level != null && client.getConnection() != null;
-
-        top += rowHeight + 4;
         Button applyButton = addButton(left, top, Component.literal("Apply"),
-                "Save changed profiles, reset Xaero, then apply only the selected mode's instruction while connected.",
+                "Save changed profiles, reset Xaero, then apply the selected profile's instruction(s) while connected.",
                 button -> applyAndClose());
         applyButton.active = hasChanges() || client.player != null && client.level != null && client.getConnection() != null;
         addButton(right, top, Component.literal("Discard"),
                 "Discard all unsaved changes and close this screen.", button -> discardAndClose());
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 1 && modeButton != null
+                && event.x() >= modeButtonX && event.x() < modeButtonX + modeButton.getWidth()
+                && event.y() >= modeButtonY && event.y() < modeButtonY + modeButton.getHeight()) {
+            cycleMode();
+            return true;
+        }
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
@@ -122,8 +134,8 @@ public final class XaerounfairConfigScreen extends Screen {
         this.minecraft.setScreenAndShow(new ConfirmScreen(
                 choice,
                 Component.literal("Unsaved XaeroUnfair settings"),
-                Component.literal("Apply your changes before leaving?"),
-                Component.literal("Apply"),
+                Component.literal("Save your changes before leaving, or discard them?"),
+                Component.literal("Save"),
                 Component.literal("Discard")
         ));
     }
@@ -148,6 +160,21 @@ public final class XaerounfairConfigScreen extends Screen {
             draftDefaults = profile;
         }
         rebuildWidgets();
+    }
+
+    private void openMessageHistory() {
+        this.minecraft.setScreenAndShow(new ServerMessageHistoryScreen(this));
+    }
+
+    private void cycleMode() {
+        XaerounfairConfig.Profile profile = selectedProfile();
+        XaerounfairConfig.Mode newMode = profile.mode() == XaerounfairConfig.Mode.MANUAL
+                ? XaerounfairConfig.Mode.SERVER_ENFORCED
+                : XaerounfairConfig.Mode.MANUAL;
+        updateProfile(new XaerounfairConfig.Profile(newMode, profile.manualProfile()));
+        if (newMode == XaerounfairConfig.Mode.SERVER_ENFORCED) {
+            replayRememberedMessages();
+        }
     }
 
     private void applyAndClose() {
@@ -194,10 +221,12 @@ public final class XaerounfairConfigScreen extends Screen {
                 .build());
     }
 
-    private void triggerReset() {
-        Minecraft client = Minecraft.getInstance();
-        if (!ResetSimulator.simulateNow(client)) {
-            XaerounfairClient.LOG.warn("Cannot simulate Xaero reset without an active world and connection");
+    private void replayRememberedMessages() {
+        List<String> messages = ChatFilterHandler.serverMessages().messagesOldestFirst().stream()
+                .map(ServerMessageHistory.Message::raw)
+                .toList();
+        if (!ResetSimulator.replayMessagesNow(Minecraft.getInstance(), messages)) {
+            XaerounfairClient.LOG.warn("Cannot replay remembered server messages without an active world and connection");
         }
     }
 

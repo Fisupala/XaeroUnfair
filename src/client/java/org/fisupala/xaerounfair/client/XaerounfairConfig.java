@@ -48,7 +48,7 @@ public final class XaerounfairConfig {
             return switch (this) {
                 case DEFAULT -> List.of();
                 case MINIMAP_OFF -> List.of("nominimap");
-                case NETHER_CAVE -> List.of("xaerommnetherisfair");
+                case NETHER_CAVE -> List.of("fairxaero", "xaerommnetherisfair");
                 case BASIC_FAIRPLAY -> List.of("fairxaero");
             };
         }
